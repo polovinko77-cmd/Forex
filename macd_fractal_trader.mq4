@@ -24,6 +24,11 @@ double TakeProfitLevel = 0;
 int TradeDirection = 0; // 1 = BUY, -1 = SELL
 int LastOrderTicket = 0;
 
+// Переменные для отслеживания свечей для определения вершины
+int LastSignalBar = -1;      // Номер бара последнего сигнала
+int LastSignalDirection = 0; // Направление последнего сигнала (1 = BUY, -1 = SELL)
+double LastSignalPrice = 0;  // Цена последнего сигнала
+
 //+------------------------------------------------------------------+
 int OnInit()
 {
@@ -63,6 +68,44 @@ int GetBollingerBandSignal()
       return 1;  // Цена выше средней линии BB - только BUY
    else
       return -1; // Цена ниже средней линии BB - только SELL
+}
+//+------------------------------------------------------------------+
+bool IsValidPeak(int buySignalBar, int sellSignalBar)
+{
+   // Проверяем что между сигналами ровно 1 свеча
+   if(MathAbs(buySignalBar - sellSignalBar) != 1)
+      return false;
+   
+   // Находим максимум между этими двумя свечами
+   double peakHigh = High[buySignalBar];
+   if(High[sellSignalBar] > peakHigh)
+      peakHigh = High[sellSignalBar];
+   
+   Print("=== PEAK DETECTED ===");
+   Print("BUY Signal Bar: ", buySignalBar);
+   Print("SELL Signal Bar: ", sellSignalBar);
+   Print("Peak High: ", DoubleToString(peakHigh, Digits));
+   
+   return true;
+}
+//+------------------------------------------------------------------+
+bool IsValidBottom(int sellSignalBar, int buySignalBar)
+{
+   // Проверяем что между сигналами ровно 1 свеча
+   if(MathAbs(sellSignalBar - buySignalBar) != 1)
+      return false;
+   
+   // Находим минимум между этими двумя свечами
+   double bottomLow = Low[sellSignalBar];
+   if(Low[buySignalBar] < bottomLow)
+      bottomLow = Low[buySignalBar];
+   
+   Print("=== BOTTOM DETECTED ===");
+   Print("SELL Signal Bar: ", sellSignalBar);
+   Print("BUY Signal Bar: ", buySignalBar);
+   Print("Bottom Low: ", DoubleToString(bottomLow, Digits));
+   
+   return true;
 }
 //+------------------------------------------------------------------+
 void CheckOrderStatus()
@@ -137,6 +180,27 @@ void CheckMACDCross()
       return;
    }
 
+   // Проверка валидности вершины/дна если это противоположный сигнал
+   if(CrossUp && LastSignalDirection == -1)
+   {
+      // Это BUY сигнал после SELL - проверяем дно
+      if(!IsValidBottom(LastSignalBar, 1))
+      {
+         Print("BOTTOM not valid - signals too far apart");
+         return;
+      }
+   }
+   
+   if(CrossDown && LastSignalDirection == 1)
+   {
+      // Это SELL сигнал после BUY - проверяем вершину
+      if(!IsValidPeak(LastSignalBar, 1))
+      {
+         Print("PEAK not valid - signals too far apart");
+         return;
+      }
+   }
+
    double HighLevel=0;
    double LowLevel=0;
 
@@ -187,9 +251,14 @@ void CheckMACDCross()
    ObjectSetInteger(0,"UpperLevel",OBJPROP_BACK,false);
    ObjectSetInteger(0,"LowerLevel",OBJPROP_BACK,false);
 
+   // Сохраняем информацию о текущем сигнале
+   LastSignalBar = 1;
+   LastSignalPrice = Close[1];
+
    // Открытие ордера в зависимости от направления
    if(CrossUp)
    {
+      LastSignalDirection = 1;
       ObjectSetInteger(0,"UpperLevel",OBJPROP_COLOR,clrDarkGreen);
       ObjectSetInteger(0,"LowerLevel",OBJPROP_COLOR,clrRed);
       
@@ -199,6 +268,7 @@ void CheckMACDCross()
    }
    else if(CrossDown)
    {
+      LastSignalDirection = -1;
       ObjectSetInteger(0,"UpperLevel",OBJPROP_COLOR,clrRed);
       ObjectSetInteger(0,"LowerLevel",OBJPROP_COLOR,clrDarkGreen);
       
@@ -209,7 +279,7 @@ void CheckMACDCross()
 
    ChartRedraw();
 
-   Print("=== MACD CROSS (BB CONFIRMED) ===");
+   Print("=== MACD CROSS (BB + PEAK/BOTTOM CONFIRMED) ===");
    Print("Upper Fractal = ",DoubleToString(HighLevel,Digits));
    Print("Lower Fractal = ",DoubleToString(LowLevel,Digits));
 }
@@ -344,17 +414,24 @@ void UpdateTrendPanel()
          orderStatus = "SELL OPEN #"+IntegerToString(OrderTicket);
    }
 
+   string lastSignalInfo = "None";
+   if(LastSignalDirection == 1)
+      lastSignalInfo = "Last: BUY";
+   else if(LastSignalDirection == -1)
+      lastSignalInfo = "Last: SELL";
+
    string txt=
       "=== MACD Fractal Trader ===\n"+
       "BB Position: "+bbPosition+
       "\nBB Middle: "+DoubleToString(bbMiddle,Digits)+
-      "\nBB Upper: "+DoubleToString(bbUpper,Digits)+
-      "\nBB Lower: "+DoubleToString(bbLower,Digits)+
       "\nPrice: "+DoubleToString(currentPrice,Digits)+
       "\n"+
       "Status: "+orderStatus+
       "\nLot: "+DoubleToString(LotSize,2)+
-      "\nMax SL: "+IntegerToString(MaxStopLossPoints)+" pts";
+      "\nMax SL: "+IntegerToString(MaxStopLossPoints)+" pts"+
+      "\n"+
+      lastSignalInfo+
+      "\nPeak/Bottom Check: ON";
 
    ObjectSetString(0,"TrendPanel",OBJPROP_TEXT,txt);
    ObjectSetInteger(0,"TrendPanel",OBJPROP_COLOR,bbColor);

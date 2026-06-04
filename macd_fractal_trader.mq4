@@ -9,6 +9,9 @@ extern int EMASlow     = 200;
 
 extern int FractalSearchBars = 100;
 
+extern int BBPeriod = 20;      // Период Bollinger Bands
+extern double BBDeviation = 2.0; // Стандартное отклонение
+
 extern double LotSize  = 0.01;
 extern int Slippage    = 10;
 extern int MaxStopLossPoints = 1000; // Максимальное расстояние StopLoss в пунктах
@@ -51,15 +54,15 @@ void OnTick()
    }
 }
 //+------------------------------------------------------------------+
-int GetTrend()
+int GetBollingerBandSignal()
 {
-   double emaFast=iMA(NULL,0,EMAFast,0,MODE_EMA,PRICE_CLOSE,0);
-   double emaSlow=iMA(NULL,0,EMASlow,0,MODE_EMA,PRICE_CLOSE,0);
+   double bbMiddle = iBands(NULL, 0, BBPeriod, BBDeviation, 0, PRICE_CLOSE, MODE_MAIN, 0);
+   double currentPrice = Close[0];
 
-   if(emaFast > emaSlow)
-      return 1;  // UPTREND
+   if(currentPrice > bbMiddle)
+      return 1;  // Цена выше средней линии BB - только BUY
    else
-      return -1; // DOWNTREND
+      return -1; // Цена ниже средней линии BB - только SELL
 }
 //+------------------------------------------------------------------+
 void CheckOrderStatus()
@@ -117,20 +120,20 @@ void CheckMACDCross()
    if(!CrossUp && !CrossDown)
       return;
 
-   // Проверка тренда
-   int currentTrend = GetTrend();
+   // Проверка Bollinger Bands
+   int bbSignal = GetBollingerBandSignal();
    
-   // BUY только в UPTREND
-   if(CrossUp && currentTrend != 1)
+   // BUY только если цена выше средней линии BB
+   if(CrossUp && bbSignal != 1)
    {
-      Print("BUY Signal REJECTED: Not in uptrend (current trend: ", currentTrend, ")");
+      Print("BUY Signal REJECTED: Price is below BB middle line");
       return;
    }
    
-   // SELL только в DOWNTREND
-   if(CrossDown && currentTrend != -1)
+   // SELL только если цена ниже средней линии BB
+   if(CrossDown && bbSignal != -1)
    {
-      Print("SELL Signal REJECTED: Not in downtrend (current trend: ", currentTrend, ")");
+      Print("SELL Signal REJECTED: Price is above BB middle line");
       return;
    }
 
@@ -206,7 +209,7 @@ void CheckMACDCross()
 
    ChartRedraw();
 
-   Print("=== MACD CROSS (TREND CONFIRMED) ===");
+   Print("=== MACD CROSS (BB CONFIRMED) ===");
    Print("Upper Fractal = ",DoubleToString(HighLevel,Digits));
    Print("Lower Fractal = ",DoubleToString(LowLevel,Digits));
 }
@@ -313,21 +316,23 @@ void CreatePanel()
 //+------------------------------------------------------------------+
 void UpdateTrendPanel()
 {
-   double emaFast=iMA(NULL,0,EMAFast,0,MODE_EMA,PRICE_CLOSE,0);
-   double emaSlow=iMA(NULL,0,EMASlow,0,MODE_EMA,PRICE_CLOSE,0);
+   double bbMiddle = iBands(NULL, 0, BBPeriod, BBDeviation, 0, PRICE_CLOSE, MODE_MAIN, 0);
+   double bbUpper = iBands(NULL, 0, BBPeriod, BBDeviation, 0, PRICE_CLOSE, MODE_UPPER, 0);
+   double bbLower = iBands(NULL, 0, BBPeriod, BBDeviation, 0, PRICE_CLOSE, MODE_LOWER, 0);
+   double currentPrice = Close[0];
 
-   string trend;
-   color trendColor;
+   string bbPosition;
+   color bbColor;
 
-   if(emaFast>emaSlow)
+   if(currentPrice > bbMiddle)
    {
-      trend="UP TREND ↑";
-      trendColor=clrDarkGreen;
+      bbPosition = "ABOVE BB MIDDLE (BUY)";
+      bbColor = clrDarkGreen;
    }
    else
    {
-      trend="DOWN TREND ↓";
-      trendColor=clrRed;
+      bbPosition = "BELOW BB MIDDLE (SELL)";
+      bbColor = clrRed;
    }
 
    string orderStatus = "NO ORDER";
@@ -341,17 +346,18 @@ void UpdateTrendPanel()
 
    string txt=
       "=== MACD Fractal Trader ===\n"+
-      "TREND: "+trend+
-      "\nEMA50: "+DoubleToString(emaFast,2)+
-      "\nEMA200: "+DoubleToString(emaSlow,2)+
+      "BB Position: "+bbPosition+
+      "\nBB Middle: "+DoubleToString(bbMiddle,Digits)+
+      "\nBB Upper: "+DoubleToString(bbUpper,Digits)+
+      "\nBB Lower: "+DoubleToString(bbLower,Digits)+
+      "\nPrice: "+DoubleToString(currentPrice,Digits)+
       "\n"+
       "Status: "+orderStatus+
       "\nLot: "+DoubleToString(LotSize,2)+
-      "\nMax SL: "+IntegerToString(MaxStopLossPoints)+" pts"+
-      "\nTrade with Trend: ON";
+      "\nMax SL: "+IntegerToString(MaxStopLossPoints)+" pts";
 
    ObjectSetString(0,"TrendPanel",OBJPROP_TEXT,txt);
-   ObjectSetInteger(0,"TrendPanel",OBJPROP_COLOR,trendColor);
+   ObjectSetInteger(0,"TrendPanel",OBJPROP_COLOR,bbColor);
    ObjectSetInteger(0,"TrendPanel",OBJPROP_FONTSIZE,11);
 }
 //+------------------------------------------------------------------+

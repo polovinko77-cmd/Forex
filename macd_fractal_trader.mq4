@@ -51,6 +51,17 @@ void OnTick()
    }
 }
 //+------------------------------------------------------------------+
+int GetTrend()
+{
+   double emaFast=iMA(NULL,0,EMAFast,0,MODE_EMA,PRICE_CLOSE,0);
+   double emaSlow=iMA(NULL,0,EMASlow,0,MODE_EMA,PRICE_CLOSE,0);
+
+   if(emaFast > emaSlow)
+      return 1;  // UPTREND
+   else
+      return -1; // DOWNTREND
+}
+//+------------------------------------------------------------------+
 void CheckOrderStatus()
 {
    if(!OrderOpened)
@@ -105,6 +116,23 @@ void CheckMACDCross()
 
    if(!CrossUp && !CrossDown)
       return;
+
+   // Проверка тренда
+   int currentTrend = GetTrend();
+   
+   // BUY только в UPTREND
+   if(CrossUp && currentTrend != 1)
+   {
+      Print("BUY Signal REJECTED: Not in uptrend (current trend: ", currentTrend, ")");
+      return;
+   }
+   
+   // SELL только в DOWNTREND
+   if(CrossDown && currentTrend != -1)
+   {
+      Print("SELL Signal REJECTED: Not in downtrend (current trend: ", currentTrend, ")");
+      return;
+   }
 
    double HighLevel=0;
    double LowLevel=0;
@@ -178,7 +206,7 @@ void CheckMACDCross()
 
    ChartRedraw();
 
-   Print("=== MACD CROSS ===");
+   Print("=== MACD CROSS (TREND CONFIRMED) ===");
    Print("Upper Fractal = ",DoubleToString(HighLevel,Digits));
    Print("Lower Fractal = ",DoubleToString(LowLevel,Digits));
 }
@@ -293,12 +321,12 @@ void UpdateTrendPanel()
 
    if(emaFast>emaSlow)
    {
-      trend="UP TREND";
+      trend="UP TREND ↑";
       trendColor=clrDarkGreen;
    }
    else
    {
-      trend="DOWN TREND";
+      trend="DOWN TREND ↓";
       trendColor=clrRed;
    }
 
@@ -319,7 +347,8 @@ void UpdateTrendPanel()
       "\n"+
       "Status: "+orderStatus+
       "\nLot: "+DoubleToString(LotSize,2)+
-      "\nMax SL: "+IntegerToString(MaxStopLossPoints)+" pts";
+      "\nMax SL: "+IntegerToString(MaxStopLossPoints)+" pts"+
+      "\nTrade with Trend: ON";
 
    ObjectSetString(0,"TrendPanel",OBJPROP_TEXT,txt);
    ObjectSetInteger(0,"TrendPanel",OBJPROP_COLOR,trendColor);

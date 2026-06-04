@@ -87,7 +87,13 @@ void CheckOrderStatus()
       OrderOpened = false;
       OrderTicket = 0;
       TradeDirection = 0;
-      Print("Order closed or not found");
+      
+      // Удаляем линии когда ордер закрывается
+      ObjectDelete(0,"UpperLevel");
+      ObjectDelete(0,"LowerLevel");
+      
+      Print("Order closed - Lines deleted, ready for new signal");
+      ChartRedraw();
       return;
    }
 }

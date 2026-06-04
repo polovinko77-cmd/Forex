@@ -18,12 +18,12 @@ bool OrderOpened = false;
 double StopLossLevel = 0;
 double TakeProfitLevel = 0;
 int TradeDirection = 0; // 1 = BUY, -1 = SELL
+int LastOrderTicket = 0;
 
 //+------------------------------------------------------------------+
 int OnInit()
 {
    CreatePanel();
-   CheckOpenOrders();
    return(INIT_SUCCEEDED);
 }
 //+------------------------------------------------------------------+
@@ -50,51 +50,38 @@ void OnTick()
    }
 }
 //+------------------------------------------------------------------+
-void CheckOpenOrders()
-{
-   OrderOpened = false;
-   OrderTicket = 0;
-   
-   for(int i=OrdersTotal()-1; i>=0; i--)
-   {
-      if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES))
-      {
-         if(OrderSymbol() == Symbol() && OrderMagicNumber() == 12345)
-         {
-            OrderOpened = true;
-            OrderTicket = OrderTicket();
-            StopLossLevel = OrderStopLoss();
-            TakeProfitLevel = OrderTakeProfit();
-            
-            if(OrderType() == OP_BUY)
-               TradeDirection = 1;
-            else if(OrderType() == OP_SELL)
-               TradeDirection = -1;
-            
-            break;
-         }
-      }
-   }
-}
-//+------------------------------------------------------------------+
 void CheckOrderStatus()
 {
    if(!OrderOpened)
       return;
    
-   if(!OrderSelect(OrderTicket, SELECT_BY_TICKET, MODE_TRADES))
+   bool foundOrder = false;
+   
+   for(int i=0; i<OrdersTotal(); i++)
+   {
+      if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES))
+      {
+         if(OrderTicket() == LastOrderTicket && OrderSymbol() == Symbol())
+         {
+            foundOrder = true;
+            break;
+         }
+      }
+   }
+   
+   if(!foundOrder)
    {
       OrderOpened = false;
       OrderTicket = 0;
+      LastOrderTicket = 0;
       TradeDirection = 0;
       
       // Удаляем линии когда ордер закрывается
       ObjectDelete(0,"UpperLevel");
       ObjectDelete(0,"LowerLevel");
       
-      Print("Order closed - Lines deleted, ready for new signal");
+      Print("=== Order closed - Lines deleted, ready for new signal ===");
       ChartRedraw();
-      return;
    }
 }
 //+------------------------------------------------------------------+
@@ -125,7 +112,6 @@ void CheckMACDCross()
    for(int i=2;i<FractalSearchBars;i++)
    {
       double up=iFractals(NULL,0,MODE_UPPER,i);
-
       if(up>0)
       {
          HighLevel=up;
@@ -137,7 +123,6 @@ void CheckMACDCross()
    for(int j=2;j<FractalSearchBars;j++)
    {
       double dn=iFractals(NULL,0,MODE_LOWER,j);
-
       if(dn>0)
       {
          LowLevel=dn;
@@ -146,7 +131,17 @@ void CheckMACDCross()
    }
 
    if(HighLevel<=0 || LowLevel<=0)
+   {
+      Print("Fractals not found: HighLevel=", HighLevel, " LowLevel=", LowLevel);
       return;
+   }
+
+   // Проверка что линии не совпадают
+   if(MathAbs(HighLevel - LowLevel) < Point())
+   {
+      Print("Fractals too close, skipping signal");
+      return;
+   }
 
    ObjectDelete(0,"UpperLevel");
    ObjectDelete(0,"LowerLevel");
@@ -166,18 +161,15 @@ void CheckMACDCross()
       ObjectSetInteger(0,"UpperLevel",OBJPROP_COLOR,clrDarkGreen);
       ObjectSetInteger(0,"LowerLevel",OBJPROP_COLOR,clrRed);
       
-      // BUY: зеленая линия = TakeProfit, красная = StopLoss
       StopLossLevel = LowLevel;
       TakeProfitLevel = HighLevel;
       OpenBuyOrder(StopLossLevel, TakeProfitLevel);
    }
-
-   if(CrossDown)
+   else if(CrossDown)
    {
       ObjectSetInteger(0,"UpperLevel",OBJPROP_COLOR,clrRed);
       ObjectSetInteger(0,"LowerLevel",OBJPROP_COLOR,clrDarkGreen);
       
-      // SELL: зеленая линия = TakeProfit, красная = StopLoss
       StopLossLevel = HighLevel;
       TakeProfitLevel = LowLevel;
       OpenSellOrder(StopLossLevel, TakeProfitLevel);
@@ -185,7 +177,7 @@ void CheckMACDCross()
 
    ChartRedraw();
 
-   Print("MACD CROSS");
+   Print("=== MACD CROSS ===");
    Print("Upper Fractal = ",DoubleToString(HighLevel,Digits));
    Print("Lower Fractal = ",DoubleToString(LowLevel,Digits));
 }
@@ -210,16 +202,18 @@ void OpenBuyOrder(double stopLoss, double takeProfit)
    
    if(ticket > 0)
    {
+      LastOrderTicket = ticket;
       OrderTicket = ticket;
       OrderOpened = true;
       TradeDirection = 1;
-      Print("BUY Order opened, Ticket: ", ticket);
-      Print("StopLoss: ", DoubleToString(stopLoss, Digits));
-      Print("TakeProfit: ", DoubleToString(takeProfit, Digits));
+      Print(">>> BUY Order opened, Ticket: ", ticket);
+      Print("    Entry: ", DoubleToString(price, Digits));
+      Print("    StopLoss: ", DoubleToString(stopLoss, Digits));
+      Print("    TakeProfit: ", DoubleToString(takeProfit, Digits));
    }
    else
    {
-      Print("Error opening BUY order: ", GetLastError());
+      Print("ERROR opening BUY order: ", GetLastError());
    }
 }
 //+------------------------------------------------------------------+
@@ -243,23 +237,24 @@ void OpenSellOrder(double stopLoss, double takeProfit)
    
    if(ticket > 0)
    {
+      LastOrderTicket = ticket;
       OrderTicket = ticket;
       OrderOpened = true;
       TradeDirection = -1;
-      Print("SELL Order opened, Ticket: ", ticket);
-      Print("StopLoss: ", DoubleToString(stopLoss, Digits));
-      Print("TakeProfit: ", DoubleToString(takeProfit, Digits));
+      Print(">>> SELL Order opened, Ticket: ", ticket);
+      Print("    Entry: ", DoubleToString(price, Digits));
+      Print("    StopLoss: ", DoubleToString(stopLoss, Digits));
+      Print("    TakeProfit: ", DoubleToString(takeProfit, Digits));
    }
    else
    {
-      Print("Error opening SELL order: ", GetLastError());
+      Print("ERROR opening SELL order: ", GetLastError());
    }
 }
 //+------------------------------------------------------------------+
 void CreatePanel()
 {
    ObjectCreate(0,"TrendPanel",OBJ_LABEL,0,0,0);
-
    ObjectSetInteger(0,"TrendPanel",OBJPROP_CORNER,CORNER_LEFT_UPPER);
    ObjectSetInteger(0,"TrendPanel",OBJPROP_XDISTANCE,10);
    ObjectSetInteger(0,"TrendPanel",OBJPROP_YDISTANCE,20);
@@ -288,21 +283,22 @@ void UpdateTrendPanel()
    if(OrderOpened)
    {
       if(TradeDirection == 1)
-         orderStatus = "BUY OPEN (Ticket: "+IntegerToString(OrderTicket)+")";
-      else
-         orderStatus = "SELL OPEN (Ticket: "+IntegerToString(OrderTicket)+")";
+         orderStatus = "BUY OPEN #"+IntegerToString(OrderTicket);
+      else if(TradeDirection == -1)
+         orderStatus = "SELL OPEN #"+IntegerToString(OrderTicket);
    }
 
    string txt=
+      "=== MACD Fractal Trader ===\n"+
       "TREND: "+trend+
       "\nEMA50: "+DoubleToString(emaFast,2)+
       "\nEMA200: "+DoubleToString(emaSlow,2)+
       "\n"+
-      "\nOrder Status: "+orderStatus+
-      "\nLot Size: "+DoubleToString(LotSize,2);
+      "Status: "+orderStatus+
+      "\nLot: "+DoubleToString(LotSize,2);
 
    ObjectSetString(0,"TrendPanel",OBJPROP_TEXT,txt);
    ObjectSetInteger(0,"TrendPanel",OBJPROP_COLOR,trendColor);
-   ObjectSetInteger(0,"TrendPanel",OBJPROP_FONTSIZE,12);
+   ObjectSetInteger(0,"TrendPanel",OBJPROP_FONTSIZE,11);
 }
 //+------------------------------------------------------------------+

@@ -11,6 +11,7 @@ extern int FractalSearchBars = 100;
 
 extern double LotSize  = 0.01;
 extern int Slippage    = 10;
+extern int MaxStopLossPoints = 1000; // Максимальное расстояние StopLoss в пунктах
 
 datetime LastBarTime = 0;
 int OrderTicket = 0;
@@ -186,6 +187,17 @@ void OpenBuyOrder(double stopLoss, double takeProfit)
 {
    double price = Ask;
    
+   // Проверка расстояния StopLoss от цены открытия
+   double slDistance = MathAbs(price - stopLoss) / Point();
+   
+   if(slDistance > MaxStopLossPoints)
+   {
+      Print("BUY Signal REJECTED: StopLoss distance (", (int)slDistance, " pts) exceeds max (", MaxStopLossPoints, " pts)");
+      ObjectDelete(0,"UpperLevel");
+      ObjectDelete(0,"LowerLevel");
+      return;
+   }
+   
    int ticket = OrderSend(
       Symbol(),           // Инструмент
       OP_BUY,             // Операция
@@ -208,7 +220,7 @@ void OpenBuyOrder(double stopLoss, double takeProfit)
       TradeDirection = 1;
       Print(">>> BUY Order opened, Ticket: ", ticket);
       Print("    Entry: ", DoubleToString(price, Digits));
-      Print("    StopLoss: ", DoubleToString(stopLoss, Digits));
+      Print("    StopLoss: ", DoubleToString(stopLoss, Digits), " (Distance: ", (int)slDistance, " pts)");
       Print("    TakeProfit: ", DoubleToString(takeProfit, Digits));
    }
    else
@@ -220,6 +232,17 @@ void OpenBuyOrder(double stopLoss, double takeProfit)
 void OpenSellOrder(double stopLoss, double takeProfit)
 {
    double price = Bid;
+   
+   // Проверка расстояния StopLoss от цены открытия
+   double slDistance = MathAbs(price - stopLoss) / Point();
+   
+   if(slDistance > MaxStopLossPoints)
+   {
+      Print("SELL Signal REJECTED: StopLoss distance (", (int)slDistance, " pts) exceeds max (", MaxStopLossPoints, " pts)");
+      ObjectDelete(0,"UpperLevel");
+      ObjectDelete(0,"LowerLevel");
+      return;
+   }
    
    int ticket = OrderSend(
       Symbol(),            // Инструмент
@@ -243,7 +266,7 @@ void OpenSellOrder(double stopLoss, double takeProfit)
       TradeDirection = -1;
       Print(">>> SELL Order opened, Ticket: ", ticket);
       Print("    Entry: ", DoubleToString(price, Digits));
-      Print("    StopLoss: ", DoubleToString(stopLoss, Digits));
+      Print("    StopLoss: ", DoubleToString(stopLoss, Digits), " (Distance: ", (int)slDistance, " pts)");
       Print("    TakeProfit: ", DoubleToString(takeProfit, Digits));
    }
    else
@@ -295,7 +318,8 @@ void UpdateTrendPanel()
       "\nEMA200: "+DoubleToString(emaSlow,2)+
       "\n"+
       "Status: "+orderStatus+
-      "\nLot: "+DoubleToString(LotSize,2);
+      "\nLot: "+DoubleToString(LotSize,2)+
+      "\nMax SL: "+IntegerToString(MaxStopLossPoints)+" pts";
 
    ObjectSetString(0,"TrendPanel",OBJPROP_TEXT,txt);
    ObjectSetInteger(0,"TrendPanel",OBJPROP_COLOR,trendColor);
